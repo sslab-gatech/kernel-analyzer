@@ -1,3 +1,14 @@
+/*
+ * main function
+ *
+ * Copyright (C) 2012 Xi Wang, Haogang Chen, Nickolai Zeldovich
+ * Copyright (C) 2015 Byoungyoung Lee
+ * Copyright (C) 2015 - 2016 Chengyu Song 
+ * Copyright (C) 2016 Kangjie Lu
+ *
+ * For licensing details see LICENSE
+ */
+
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Module.h"

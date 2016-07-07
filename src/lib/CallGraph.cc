@@ -1,3 +1,14 @@
+/*
+ * Call graph construction
+ *
+ * Copyright (C) 2012 Xi Wang, Haogang Chen, Nickolai Zeldovich
+ * Copyright (C) 2015 - 2016 Chengyu Song 
+ * Copyright (C) 2016 Kangjie Lu
+ *
+ * For licensing details see LICENSE
+ */
+
+
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/Pass.h>
 #include <llvm/IR/Instructions.h>
