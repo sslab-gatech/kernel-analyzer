@@ -558,7 +558,7 @@ bool RangePass::doFinalization(Module *M) {
 		}
 	}
 #endif
-	return true;
+	return false;
 }
 
 
