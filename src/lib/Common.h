@@ -11,7 +11,7 @@
 #define KA_LOG(lv, stmt)							\
 	do {											\
 		if (VerboseLevel >= lv)						\
-			errs() << stmt;							\
+			llvm::errs() << stmt;					\
 	} while(0)
 
 
@@ -19,11 +19,11 @@
 #define WARNING(stmt) KA_LOG(1, "\n[WARN] " << stmt);
 #define TEST_REPORT(stmt) KA_LOG(3, "[TEST] " << stmt);
 
-#define KA_ERR(stmt)													\
-	do {																\
-		errs() << "ERROR (" << __FUNCTION__ << "@" << __LINE__ << ")";	\
-		errs() << ": " << stmt;											\
-		exit(-1);														\
+#define KA_ERR(stmt)															\
+	do {																		\
+		llvm::errs() << "ERROR (" << __FUNCTION__ << "@" << __LINE__ << ")";	\
+		llvm::errs() << ": " << stmt;											\
+		exit(-1);																\
     } while(0)
 
 class Timer {

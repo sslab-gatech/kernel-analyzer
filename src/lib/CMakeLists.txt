@@ -3,10 +3,15 @@ set (KASource
   Common.h
   Global.h
   KAMain.cc
+  Annotation.h
+  Annotation.cc
   CallGraph.h
   CallGraph.cc
   SafeStack.h
   SafeStack.cc
+  CRange.h
+  Range.h
+  Range.cc
 )
 
 # Build libraries.
