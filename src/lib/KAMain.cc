@@ -48,6 +48,12 @@ cl::opt<bool> DumpCallees(
 cl::opt<bool> DumpCallers(
     "dump-caller-graph", cl::desc("Dump caller graph"), cl::NotHidden, cl::init(false));
 
+cl::opt<bool> DoSafeStack(
+	"safe-stack", cl::desc("Perfrom safe stack analysis"), cl::NotHidden, cl::init(false));
+
+cl::opt<bool> DumpStackStats(
+	"dump-stack-stats", cl::desc("Dump stack stats"), cl::NotHidden, cl::init(false));
+
 GlobalContext GlobalCtx;
 
 #define Diag llvm::errs()
@@ -150,6 +156,18 @@ int main(int argc, char **argv)
 
   if (DumpCallers)
     CGPass.dumpCallers();
+
+  if (DoSafeStack) {
+#ifdef DO_RANGE_ANALYSIS
+    RangePass RPass(&GlobalCtx);
+    RPass.run(GlobalCtx.Modules);
+#endif
+
+    SafeStackPass SSPass(&GlobalCtx);
+    SSPass.run(GlobalCtx.Modules);
+    if (DumpStackStats)
+	  SSPass.dumpStats();
+  }
 
   return 0;
 }

@@ -1,10 +1,12 @@
 set (KASource
-    Flags.h
-	Common.h
-    Global.h
-    KAMain.cc
-	CallGraph.h
-    CallGraph.cc
+  Flags.h
+  Common.h
+  Global.h
+  KAMain.cc
+  CallGraph.h
+  CallGraph.cc
+  SafeStack.h
+  SafeStack.cc
 )
 
 # Build libraries.
