@@ -16,7 +16,7 @@ set (KASource
 
 # Build libraries.
 add_library (KAObj OBJECT ${KASource})
-add_library (KAShared SHARED $<TARGET_OBJECTS:KAObj>)
+# add_library (KAShared SHARED $<TARGET_OBJECTS:KAObj>)
 add_library (KAStatic STATIC $<TARGET_OBJECTS:KAObj>)
 
 # Build executable, KAMain.
