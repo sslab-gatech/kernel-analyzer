@@ -21,9 +21,11 @@
 
 #include "CallGraph.h"
 
+#define TYPE_BASED
+
 using namespace llvm;
 
-void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &S) {
+void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &FS) {
     CallSite CS(CI);
     //errs() << *CI << "\n";
     for (Function *F : Ctx->AddressTakenFuncs) {
@@ -51,13 +53,13 @@ void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &S) {
             Type *FormalTy = FI->getType();
             Type *ActualTy = (*AI)->getType();
 
-            if (FormalTy == ActualTy)
+            if (FormalTy->getTypeID() == ActualTy->getTypeID())
                 continue;
             // assume "void *" and "char *" are equivalent to any pointer type
             // and integer type
-            else if ((FormalTy == Int8PtrTy &&
-                (ActualTy->isPointerTy() || ActualTy == IntPtrTy)) || 
-                (ActualTy == Int8PtrTy &&
+            else if (((FormalTy->isPointerTy() && FormalTy->getPointerElementType()->isIntegerTy(8)) &&
+                (ActualTy->isPointerTy() || ActualTy == IntPtrTy)) ||
+                ((ActualTy->isPointerTy() && ActualTy->getPointerElementType()->isIntegerTy(8)) &&
                 (FormalTy->isPointerTy() || FormalTy == IntPtrTy)))
                 continue;
             else {
@@ -67,11 +69,11 @@ void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &S) {
         }
 
         if (Matched)
-            S.insert(F);
+            FS.insert(F);
     }
 }
 
-bool CallGraphPass::findCallees(CallInst *CI, FuncSet &S) {
+bool CallGraphPass::findCallees(CallInst *CI, FuncSet &FS) {
     Function *CF = CI->getCalledFunction();
     // real function, S = S + {F}
     if (CF) {
@@ -80,7 +82,7 @@ bool CallGraphPass::findCallees(CallInst *CI, FuncSet &S) {
         if (it != Ctx->Funcs.end())
             CF = it->second;
 
-        return S.insert(CF).second;
+        return FS.insert(CF).second;
     }
 
     // save called values for point-to analysis
@@ -132,6 +134,7 @@ bool CallGraphPass::doInitialization(Module *M) {
             StringRef FName = F.getName();
             if (FName.startswith("SyS_"))
                 FName = StringRef("sys_" + FName.str().substr(4));
+            assert(Ctx->Funcs.count(FName) == 0);
             Ctx->Funcs[FName] = &F;
         }
     }
