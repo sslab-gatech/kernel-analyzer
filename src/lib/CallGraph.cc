@@ -33,8 +33,7 @@ bool CallGraphPass::isCompatibleType(Type *T1, Type *T2) {
         Type *ElT1 = T1->getPointerElementType();
         Type *ElT2 = T2->getPointerElementType();
         // assume "void *" and "char *" are equivalent to any pointer type
-        // and integer type
-        if (ElT1->isIntegerTy(8) || ElT2->isIntegerTy(8))
+        if (ElT1->isIntegerTy(8) /*|| ElT2->isIntegerTy(8)*/)
             return true;
 
         return isCompatibleType(ElT1, ElT2);
@@ -124,6 +123,8 @@ void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &FS) {
             //report_fatal_error("VarArg address taken function\n");
         } else if (F->arg_size() != CS.arg_size()) {
             //errs() << "ArgNum mismatch: " << F.getName() << "\n";
+            continue;
+        } else if (!isCompatibleType(F->getReturnType(), CI->getType())) {
             continue;
         }
 
