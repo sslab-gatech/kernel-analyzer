@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2012 Xi Wang, Haogang Chen, Nickolai Zeldovich
  * Copyright (C) 2015 Byoungyoung Lee
- * Copyright (C) 2015 - 2016 Chengyu Song 
+ * Copyright (C) 2015 - 2017 Chengyu Song 
  * Copyright (C) 2016 Kangjie Lu
  *
  * For licensing details see LICENSE
@@ -36,23 +36,23 @@
 using namespace llvm;
 
 cl::list<std::string> InputFilenames(
-    cl::Positional, cl::OneOrMore, cl::desc("<input bitcode files>"));
+  cl::Positional, cl::OneOrMore, cl::desc("<input bitcode files>"));
 
 cl::opt<unsigned> VerboseLevel(
-    "htleak-verbose", cl::desc("Print information about actions taken"),
-    cl::init(0));
+  "htleak-verbose", cl::desc("Print information about actions taken"),
+  cl::init(0));
 
 cl::opt<bool> DumpCallees(
-    "dump-call-graph", cl::desc("Dump call graph"), cl::NotHidden, cl::init(false));
+  "dump-call-graph", cl::desc("Dump call graph"), cl::NotHidden, cl::init(false));
 
 cl::opt<bool> DumpCallers(
-    "dump-caller-graph", cl::desc("Dump caller graph"), cl::NotHidden, cl::init(false));
+  "dump-caller-graph", cl::desc("Dump caller graph"), cl::NotHidden, cl::init(false));
 
 cl::opt<bool> DoSafeStack(
-	"safe-stack", cl::desc("Perfrom safe stack analysis"), cl::NotHidden, cl::init(false));
+  "safe-stack", cl::desc("Perfrom safe stack analysis"), cl::NotHidden, cl::init(false));
 
 cl::opt<bool> DumpStackStats(
-	"dump-stack-stats", cl::desc("Dump stack stats"), cl::NotHidden, cl::init(false));
+  "dump-stack-stats", cl::desc("Dump stack stats"), cl::NotHidden, cl::init(false));
 
 GlobalContext GlobalCtx;
 
@@ -111,7 +111,7 @@ void doBasicInitialization(Module *M) {
   // collect global object definitions
   for (GlobalVariable &G : M->globals()) {
     if (G.hasExternalLinkage())
-		  GlobalCtx.Gobjs[G.getName()] = &G;
+      GlobalCtx.Gobjs[G.getName()] = &G;
   }
 
   // collect global function definitions
@@ -191,7 +191,7 @@ int main(int argc, char **argv)
     SafeStackPass SSPass(&GlobalCtx);
     SSPass.run(GlobalCtx.Modules);
     if (DumpStackStats)
-	  SSPass.dumpStats();
+      SSPass.dumpStats();
   }
 
   return 0;
