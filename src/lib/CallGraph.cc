@@ -20,10 +20,19 @@
 #include <llvm/Analysis/CallGraph.h>
 
 #include "CallGraph.h"
+#include "Annotation.h"
 
-#define TYPE_BASED
+//#define TYPE_BASED
 
 using namespace llvm;
+
+Function* CallGraphPass::getFuncDef(Function *F) {
+    FuncMap::iterator it = Ctx->Funcs.find(getScopeName(F));
+    if (it != Ctx->Funcs.end())
+        return it->second;
+    else
+        return F;
+} 
 
 bool CallGraphPass::isCompatibleType(Type *T1, Type *T2) {
     if (T1->isPointerTy()) {
@@ -112,7 +121,7 @@ bool CallGraphPass::isCompatibleType(Type *T1, Type *T2) {
     }
 }
 
-void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &FS) {
+bool CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &FS) {
     CallSite CS(CI);
     //errs() << *CI << "\n";
     for (Function *F : Ctx->AddressTakenFuncs) {
@@ -153,6 +162,146 @@ void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &FS) {
         if (Matched)
             FS.insert(F);
     }
+
+    return false;
+}
+
+bool CallGraphPass::mergeFuncSet(FuncSet &S, const std::string &Id, bool InsertEmpty) {
+    FuncPtrMap::iterator i = Ctx->FuncPtrs.find(Id);
+    if (i != Ctx->FuncPtrs.end())
+        return mergeFuncSet(S, i->second);
+    else if (InsertEmpty)
+        Ctx->FuncPtrs.insert(std::make_pair(Id, FuncSet()));
+    return false;
+}
+
+bool CallGraphPass::mergeFuncSet(std::string &Id, const FuncSet &S, bool InsertEmpty) {
+    FuncPtrMap::iterator i = Ctx->FuncPtrs.find(Id);
+    if (i != Ctx->FuncPtrs.end())
+        return mergeFuncSet(i->second, S);
+    else if (!S.empty())
+        return mergeFuncSet(Ctx->FuncPtrs[Id], S);
+    else if (InsertEmpty)
+        Ctx->FuncPtrs.insert(std::make_pair(Id, FuncSet()));
+    return false;
+}
+
+bool CallGraphPass::mergeFuncSet(FuncSet &Dst, const FuncSet &Src) {
+    bool Changed = false;
+    for (FuncSet::const_iterator i = Src.begin(), e = Src.end(); i != e; ++i) {
+        assert(*i);
+        Changed |= Dst.insert(*i).second;
+    }
+    return Changed;
+}
+
+bool CallGraphPass::findFunctions(Value *V, FuncSet &S) {
+    SmallPtrSet<Value *, 4> Visited;
+    return findFunctions(V, S, Visited);
+}
+
+bool CallGraphPass::findFunctions(Value *V, FuncSet &S,
+                                  SmallPtrSet<Value *, 4> Visited) {
+    if (!Visited.insert(V).second)
+        return false;
+
+    // real function, S = S + {F}
+    if (Function *F = dyn_cast<Function>(V)) {
+        // prefer the real definition to declarations
+        F = getFuncDef(F);
+        return S.insert(F).second;
+    }
+
+    // bitcast, ignore the cast
+    if (CastInst *B = dyn_cast<CastInst>(V))
+        return findFunctions(B->getOperand(0), S, Visited);
+
+    // const bitcast, ignore the cast
+    if (ConstantExpr *C = dyn_cast<ConstantExpr>(V)) {
+        if (C->isCast()) {
+            return findFunctions(C->getOperand(0), S, Visited);
+        }
+        // FIXME GEP
+    }
+
+    if (GetElementPtrInst *G = dyn_cast<GetElementPtrInst>(V)) {
+        return false;
+    } else if (isa<ExtractValueInst>(V)) {
+        return false;
+    }
+
+    if (isa<AllocaInst>(V)) {
+        return false;
+    }
+
+    if (BinaryOperator *BO = dyn_cast<BinaryOperator>(V)) {
+        Value *op0 = BO->getOperand(0);
+        Value *op1 = BO->getOperand(1);
+        if (!isa<Constant>(op0) && isa<Constant>(op1))
+            return findFunctions(op0, S, Visited);
+        else if (isa<Constant>(op0) && !isa<Constant>(op1))
+            return findFunctions(op1, S, Visited);
+        else
+            return false;
+    }
+
+    // PHI node, recursively collect all incoming values
+    if (PHINode *P = dyn_cast<PHINode>(V)) {
+        bool Changed = false;
+        for (unsigned i = 0; i != P->getNumIncomingValues(); ++i)
+            Changed |= findFunctions(P->getIncomingValue(i), S, Visited);
+        return Changed;
+    }
+
+    // select, recursively collect both paths
+    if (SelectInst *SI = dyn_cast<SelectInst>(V)) {
+        bool Changed = false;
+        Changed |= findFunctions(SI->getTrueValue(), S, Visited);
+        Changed |= findFunctions(SI->getFalseValue(), S, Visited);
+        return Changed;
+    }
+
+    // arguement, S = S + FuncPtrs[arg.ID]
+    if (Argument *A = dyn_cast<Argument>(V)) {
+        bool InsertEmpty = isFunctionPointer(A->getType());
+        return mergeFuncSet(S, getArgId(A), InsertEmpty);
+    }
+
+    // return value, S = S + FuncPtrs[ret.ID]
+    if (CallInst *CI = dyn_cast<CallInst>(V)) {
+        // update callsite info first
+        FuncSet &FS = Ctx->Callees[CI];
+        //FS.setCallerInfo(CI, &Ctx->Callers);
+        findFunctions(CI->getCalledValue(), FS);
+        bool Changed = false;
+        for (Function *CF : FS) {
+            bool InsertEmpty = isFunctionPointer(CI->getType());
+            Changed |= mergeFuncSet(S, getRetId(CF), InsertEmpty);
+        }
+        return Changed;
+    }
+
+    // loads, S = S + FuncPtrs[struct.ID]
+    if (LoadInst *L = dyn_cast<LoadInst>(V)) {
+        std::string Id = getLoadId(L);
+        if (!Id.empty()) {
+            bool InsertEmpty = isFunctionPointer(L->getType());
+            return mergeFuncSet(S, Id, InsertEmpty);
+        } else {
+            Function *f = L->getParent()->getParent();
+            errs() << "Empty LoadID: " << f->getName() << "::" << *L << "\n";
+            return false;
+        }
+    }
+
+    // ignore other constant (usually null), inline asm and inttoptr
+    if (isa<Constant>(V) || isa<InlineAsm>(V) || isa<IntToPtrInst>(V))
+        return false;
+
+    //V->dump();
+    //report_fatal_error("findFunctions: unhandled value type\n");
+    errs() << "findFunctions: unhandled value type: " << *V << "\n";
+    return false;
 }
 
 bool CallGraphPass::findCallees(CallInst *CI, FuncSet &FS) {
@@ -160,10 +309,7 @@ bool CallGraphPass::findCallees(CallInst *CI, FuncSet &FS) {
     // real function, S = S + {F}
     if (CF) {
         // prefer the real definition to declarations
-        FuncMap::iterator it = Ctx->Funcs.find(CF->getName());
-        if (it != Ctx->Funcs.end())
-            CF = it->second;
-
+        CF = getFuncDef(CF);
         return FS.insert(CF).second;
     }
 
@@ -173,18 +319,20 @@ bool CallGraphPass::findCallees(CallInst *CI, FuncSet &FS) {
 #ifdef TYPE_BASED
     // use type matching to concervatively find 
     // possible targets of indirect call
-    findCalleesByType(CI, FS);
+    return findCalleesByType(CI, FS);
+#else
+    // use assignments based approach to find possible targets
+    return findFunctions(CI->getCalledValue(), FS);
 #endif
-
-    return false;
 }
 
 bool CallGraphPass::runOnFunction(Function *F) {
     bool Changed = false;
 
     for (inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i) {
+        Instruction *I = &*i;
         // map callsite to possible callees
-        if (CallInst *CI = dyn_cast<CallInst>(&*i)) {
+        if (CallInst *CI = dyn_cast<CallInst>(I)) {
             // ignore inline asm or intrinsic calls
             if (CI->isInlineAsm() || (CI->getCalledFunction()
                     && CI->getCalledFunction()->isIntrinsic()))
@@ -192,14 +340,123 @@ bool CallGraphPass::runOnFunction(Function *F) {
 
             // might be an indirect call, find all possible callees
             FuncSet &FS = Ctx->Callees[CI];
-            findCallees(CI, FS);
+            if (!findCallees(CI, FS))
+                continue;
         }
+#ifndef TYPE_BASED
+        if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
+            // stores to function pointers
+            Value *V = SI->getValueOperand();
+            if (isFunctionPointerOrVoid(V->getType())) {
+                std::string Id = getStoreId(SI);
+                if (!Id.empty()) {
+                    FuncSet FS;
+                    findFunctions(V, FS);
+                    Changed |= mergeFuncSet(Id, FS, isFunctionPointer(V->getType()));
+                } else {
+                    errs() << "Empty StoreID: " << F->getName() << "::" << *SI << "\n";
+                }
+            }
+        } else if (ReturnInst *RI = dyn_cast<ReturnInst>(I)) {
+            // function returns
+            if (isFunctionPointerOrVoid(F->getReturnType())) {
+                Value *V = RI->getReturnValue();
+                std::string Id = getRetId(F);
+                FuncSet FS;
+                findFunctions(V, FS);
+                Changed |= mergeFuncSet(Id, FS, isFunctionPointer(V->getType()));
+            }
+        } else if (CallInst *CI = dyn_cast<CallInst>(I)) {
+            // looking for function pointer arguments
+            FuncSet &FS = Ctx->Callees[CI];
+            for (unsigned no = 0, ne = CI->getNumArgOperands(); no != ne; ++no) {
+                Value *V = CI->getArgOperand(no);
+                if (!isFunctionPointerOrVoid(V->getType()))
+                    continue;
+
+                // find all possible assignments to the argument
+                FuncSet VS;
+                if (!findFunctions(V, VS))
+                    continue;
+
+                // update argument FP-set for possible callees
+                for (Function *CF : FS) {
+                    if (!CF) {
+                        WARNING("NULL Function " << *CI << "\n");
+                        assert(0);
+                    }
+                    std::string Id = getArgId(CF, no);
+                    Changed |= mergeFuncSet(Ctx->FuncPtrs[Id], VS);
+                }
+            }
+        }
+#endif
     }
 
     return Changed;
 }
 
+// collect function pointer assignments in global initializers
+void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, StringRef Id) {
+    // structs
+    if (ConstantStruct *CS = dyn_cast<ConstantStruct>(C)) {
+        StructType *STy = CS->getType();
+        if (!STy->hasName() && Id.empty()) {
+            Id = getVarId(V);
+        }
+        for (unsigned i = 0; i != STy->getNumElements(); ++i) {
+            Type *ETy = STy->getElementType(i);
+            if (ETy->isStructTy()) {
+                std::string new_id;
+                if (Id.empty())
+                    new_id = STy->getStructName().str() + "," + Twine(i).str();
+                else
+                    new_id = Id.str() + "," + Twine(i).str();
+                processInitializers(M, CS->getOperand(i), NULL, new_id);
+            } else if (ETy->isArrayTy()) {
+                // nested array of struct
+                processInitializers(M, CS->getOperand(i), NULL, "");
+            } else if (isFunctionPointer(ETy)) {
+                // found function pointers in struct fields
+                if (Function *F = dyn_cast<Function>(CS->getOperand(i))) {
+                    std::string new_id;
+                    if (!STy->isLiteral()) {
+                        if (STy->getStructName().startswith("struct.anon.") ||
+                            STy->getStructName().startswith("union.anon")) {
+                            if (Id.empty())
+                                new_id = getStructId(STy, M, i);
+                        } else {
+                            new_id = getStructId(STy, M, i);
+                        }
+                    }
+                    if (new_id.empty()) {
+                        assert(!Id.empty());
+                        new_id = Id.str() + "," + Twine(i).str();
+                    }
+                    Ctx->FuncPtrs[new_id].insert(F);
+                }
+            }
+        }
+    } else if (ConstantArray *CA = dyn_cast<ConstantArray>(C)) {
+        // array, conservatively collects all possible pointers
+        for (unsigned i = 0; i != CA->getNumOperands(); ++i)
+            processInitializers(M, CA->getOperand(i), V, Id);
+    } else if (Function *F = dyn_cast<Function>(C)) {
+        // global function pointer variables
+        if (V) {
+            std::string Id = getVarId(V);
+            Ctx->FuncPtrs[Id].insert(F);
+        }
+    }
+}
+
 bool CallGraphPass::doInitialization(Module *M) {
+
+    // collect function pointer assignments in global initializers
+    for (GlobalVariable &G : M->globals()) {
+        if (G.hasInitializer())
+            processInitializers(M, G.getInitializer(), &G, "");
+    }
 
     for (Function &F : *M) { 
         // collect address-taken functions
