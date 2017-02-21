@@ -25,6 +25,94 @@
 
 using namespace llvm;
 
+bool CallGraphPass::isCompatibleType(Type *T1, Type *T2) {
+    if (T1->isPointerTy()) {
+        if (!T2->isPointerTy())
+            return false;
+
+        Type *ElT1 = T1->getPointerElementType();
+        Type *ElT2 = T2->getPointerElementType();
+        // assume "void *" and "char *" are equivalent to any pointer type
+        // and integer type
+        if (ElT1->isIntegerTy(8) || ElT2->isIntegerTy(8))
+            return true;
+
+        return isCompatibleType(ElT1, ElT2);
+    } else if (T1->isArrayTy()) {
+        if (!T2->isArrayTy())
+            return false;
+
+        Type *ElT1 = T1->getArrayElementType();
+        Type *ElT2 = T2->getArrayElementType();
+        return isCompatibleType(ElT1, ElT1);
+    } else if (T1->isIntegerTy()) {
+        // assume pointer can be cased to the address space size
+        if (T2->isPointerTy() && T1->getIntegerBitWidth() == T2->getPointerAddressSpace())
+            return true;
+
+        // assume all integer type are compatible
+        if (T2->isIntegerTy())
+            return true;
+        else
+            return false;
+    } else if (T1->isStructTy()) {
+        StructType *ST1 = cast<StructType>(T1);
+        StructType *ST2 = dyn_cast<StructType>(T2);
+        if (!ST2)
+            return false;
+
+        // literal has to be equal
+        if (ST1->isLiteral() != ST2->isLiteral())
+            return false;
+
+        // literal, compare content
+        if (ST1->isLiteral()) {
+            unsigned numEl1 = ST1->getNumElements();
+            if (numEl1 != ST2->getNumElements())
+                return false;
+
+            for (unsigned i = 0; i < numEl1; ++i) {
+                if (!isCompatibleType(ST1->getElementType(i), ST2->getElementType(i)))
+                    return false;
+            }
+            return true;
+        }
+
+        // not literal, use name?
+        return ST1->getStructName().equals(ST2->getStructName());
+    } else if (T1->isFunctionTy()) {
+        FunctionType *FT1 = cast<FunctionType>(T1);
+        FunctionType *FT2 = dyn_cast<FunctionType>(T2);
+        if (!FT2)
+            return false;
+
+        if (!isCompatibleType(FT1->getReturnType(), FT2->getReturnType()))
+            return false;
+
+        // assume varg is always compatible with varg?
+        if (FT1->isVarArg()) {
+            if (FT2->isVarArg())
+                return true;
+            else
+                return false;
+        }
+
+        // compare args, again ...
+        unsigned numParam1 = FT1->getNumParams();
+        if (numParam1 != FT2->getNumParams())
+            return false;
+
+        for (unsigned i = 0; i < numParam1; ++i) {
+            if (!isCompatibleType(FT1->getParamType(i), FT2->getParamType(i)))
+                return false;
+        }
+        return true;
+    } else {
+        errs() << "Unhandled Types:" << *T1 << " :: " << *T2 << "\n";
+        return T1->getTypeID() == T2->getTypeID();
+    }
+}
+
 void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &FS) {
     CallSite CS(CI);
     //errs() << *CI << "\n";
@@ -53,14 +141,7 @@ void CallGraphPass::findCalleesByType(CallInst *CI, FuncSet &FS) {
             Type *FormalTy = FI->getType();
             Type *ActualTy = (*AI)->getType();
 
-            if (FormalTy->getTypeID() == ActualTy->getTypeID())
-                continue;
-            // assume "void *" and "char *" are equivalent to any pointer type
-            // and integer type
-            else if (((FormalTy->isPointerTy() && FormalTy->getPointerElementType()->isIntegerTy(8)) &&
-                (ActualTy->isPointerTy() || ActualTy == IntPtrTy)) ||
-                ((ActualTy->isPointerTy() && ActualTy->getPointerElementType()->isIntegerTy(8)) &&
-                (FormalTy->isPointerTy() || FormalTy == IntPtrTy)))
+            if (isCompatibleType(FormalTy, ActualTy))
                 continue;
             else {
                 Matched = false;
@@ -119,24 +200,10 @@ bool CallGraphPass::runOnFunction(Function *F) {
 
 bool CallGraphPass::doInitialization(Module *M) {
 
-    DL = &(M->getDataLayout());
-    Int8PtrTy = Type::getInt8PtrTy(M->getContext());
-    IntPtrTy = DL->getIntPtrType(M->getContext());
-
     for (Function &F : *M) { 
         // collect address-taken functions
         if (F.hasAddressTaken())
             Ctx->AddressTakenFuncs.insert(&F);
-    
-        // collect global function definitions
-        if (F.hasExternalLinkage() && !F.empty()) {
-            // external linkage always ends up with the function name
-            StringRef FName = F.getName();
-            if (FName.startswith("SyS_"))
-                FName = StringRef("sys_" + FName.str().substr(4));
-            assert(Ctx->Funcs.count(FName) == 0);
-            Ctx->Funcs[FName] = &F;
-        }
     }
 
     return false;
@@ -208,12 +275,14 @@ void CallGraphPass::dumpCallees() {
         OS << "LOC: ";
         LOC.print(OS);
         OS << "^@^";
+#if 0
         for (FuncSet::iterator j = v.begin(), ej = v.end();
              j != ej; ++j) {
             //OS << "\t" << ((*j)->hasInternalLinkage() ? "f" : "F")
             //    << " " << (*j)->getName() << "\n";
             OS << (*j)->getName() << "::";
         }
+#endif
         OS << "\n";
 
         v = Ctx->Callees[CI];

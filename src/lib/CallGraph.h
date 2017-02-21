@@ -5,13 +5,10 @@
 
 class CallGraphPass : public IterativeModulePass {
 private:
-    const DataLayout *DL;
-    Type *Int8PtrTy;
-    Type *IntPtrTy;
-
     bool runOnFunction(llvm::Function*);
     void processInitializers(llvm::Module*, llvm::Constant*, llvm::GlobalValue*, llvm::StringRef);
     bool findCallees(llvm::CallInst*, FuncSet&);
+    bool isCompatibleType(llvm::Type *T1, llvm::Type *T2);
     void findCalleesByType(llvm::CallInst*, FuncSet&);
 
 public:
