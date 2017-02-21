@@ -104,6 +104,29 @@ void IterativeModulePass::run(ModuleList &modules) {
   Diag << "[" << ID << "] Done!\n\n";
 }
 
+void doBasicInitialization(Module *M) {
+  // struct analysis
+  GlobalCtx.structAnalyzer.run(M, &(M->getDataLayout()));
+
+  // collect global object definitions
+  for (GlobalVariable &G : M->globals()) {
+    if (G.hasExternalLinkage())
+		  GlobalCtx.Gobjs[G.getName()] = &G;
+  }
+
+  // collect global function definitions
+  for (Function &F : *M) {
+    if (F.hasExternalLinkage() && !F.empty()) {
+      // external linkage always ends up with the function name
+      StringRef FName = F.getName();
+      if (FName.startswith("SyS_"))
+        FName = StringRef("sys_" + FName.str().substr(4));
+      assert(GlobalCtx.Funcs.count(FName) == 0);
+      GlobalCtx.Funcs[FName] = &F;
+    }
+  }
+}
+
 int main(int argc, char **argv)
 {
 
@@ -116,7 +139,7 @@ int main(int argc, char **argv)
 #endif
 
   // Print a stack trace if we signal out.
-  sys::PrintStackTraceOnErrorSignal();
+  sys::PrintStackTraceOnErrorSignal(StringRef());
   PrettyStackTraceProgram X(argc, argv);
 
   llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
@@ -144,6 +167,8 @@ int main(int argc, char **argv)
     StringRef MName = StringRef(strdup(InputFilenames[i].data()));
     GlobalCtx.Modules.push_back(std::make_pair(Module, MName));
     GlobalCtx.ModuleMaps[Module] = InputFilenames[i];
+
+    doBasicInitialization(Module);
   }
 
   // Main workflow
