@@ -20,6 +20,7 @@
 #include <string>
 
 #include "Common.h"
+#include "StructAnalyzer.h"
 
 typedef std::vector< std::pair<llvm::Module*, llvm::StringRef> > ModuleList;
 typedef std::unordered_map<llvm::Module*, llvm::StringRef> ModuleMap;
@@ -56,6 +57,9 @@ public:
 		else
 			return nullptr;
 	}
+
+	// StructAnalyzer
+	StructAnalyzer structAnalyzer;
 
 	// Map global object name to object definition
 	GObjMap Gobjs;

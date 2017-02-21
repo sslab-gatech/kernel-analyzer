@@ -5,6 +5,8 @@ set (KASource
   KAMain.cc
   Annotation.h
   Annotation.cc
+  StructAnalyzer.h
+  StructAnalyzer.cc
   CallGraph.h
   CallGraph.cc
   SafeStack.h
