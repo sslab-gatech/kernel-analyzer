@@ -46,9 +46,8 @@ static inline bool isFunctionPointerOrVoid(llvm::Type *Ty) {
 
 	// FIXME should add something in clang to indicate real void*
 	// like in CPI
-	if (llvm::IntegerType *ITy = llvm::dyn_cast<llvm::IntegerType>(subTy))
-		if (ITy->getBitWidth() == 8)
-			return true;
+	if (subTy->isIntegerTy(8))
+		return true;
 
 	return false;
 }
