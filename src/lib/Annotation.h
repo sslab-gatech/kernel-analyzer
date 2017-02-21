@@ -62,8 +62,8 @@ static inline std::string getScopeName(const llvm::GlobalValue *GV) {
 	}
 }
 
-static inline std::string getScopeName(llvm::Instruction *I) {
-	llvm::Function *F = I->getParent()->getParent();
+static inline std::string getScopeName(const llvm::Instruction *I) {
+	const llvm::Function *F = I->getParent()->getParent();
 	assert(F && "Cannot get Function");
 	llvm::StringRef moduleName = llvm::sys::path::stem(
 			F->getParent()->getModuleIdentifier());
@@ -93,7 +93,7 @@ static inline std::string getScopeName(const llvm::StructType *Ty, const llvm::M
 	return structName.str();
 }
 
-static inline llvm::StringRef getLoadStoreId(llvm::Instruction *I) {
+static inline llvm::StringRef getLoadStoreId(const llvm::Instruction *I) {
 	if (llvm::MDNode *MD = I->getMetadata(MD_ID))
 		return getStringFromMD(MD);
 	return llvm::StringRef();
