@@ -139,7 +139,11 @@ int main(int argc, char **argv)
 #endif
 
   // Print a stack trace if we signal out.
+#if LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 9
+  sys::PrintStackTraceOnErrorSignal();
+#else
   sys::PrintStackTraceOnErrorSignal(StringRef());
+#endif
   PrettyStackTraceProgram X(argc, argv);
 
   llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
