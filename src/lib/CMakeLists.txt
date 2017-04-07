@@ -14,6 +14,8 @@ set (KASource
   CRange.h
   Range.h
   Range.cc
+  LinuxSS.h
+  LinuxSS.cc
 )
 
 # Build libraries.

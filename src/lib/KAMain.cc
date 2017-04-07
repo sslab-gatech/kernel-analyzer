@@ -54,6 +54,10 @@ cl::opt<bool> DoSafeStack(
 cl::opt<bool> DumpStackStats(
   "dump-stack-stats", cl::desc("Dump stack stats"), cl::NotHidden, cl::init(false));
 
+cl::opt<bool> DoLSS(
+  "linux-ss", cl::desc("Discover security sensitive data in Linux kernel"),
+  cl::NotHidden, cl::init(false));
+
 GlobalContext GlobalCtx;
 
 #define Diag llvm::errs()
@@ -196,6 +200,11 @@ int main(int argc, char **argv)
     SSPass.run(GlobalCtx.Modules);
     if (DumpStackStats)
       SSPass.dumpStats();
+  }
+
+  if (DoLSS) {
+    LinuxSS LSS(&GlobalCtx);
+    LSS.run(GlobalCtx.Modules);
   }
 
   return 0;
