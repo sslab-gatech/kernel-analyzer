@@ -1,8 +1,8 @@
 #ifndef _LINUX_SS_H
 #define _LINUX_SS_H
 
-#include "llvm/IR/Dominators.h"
-#include "llvm/ADT/SmallSet.h"
+#include <llvm/IR/Dominators.h>
+#include <llvm/ADT/SmallSet.h>
 #include "Global.h"
 
 #include <set>
