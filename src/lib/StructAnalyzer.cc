@@ -137,14 +137,14 @@ bool StructAnalyzer::getContainer(std::string stid, const Module* M, std::set<st
 	for (const StructType* container : itr->second.containers) {
 		if (container->isLiteral())
 			continue;
-		StringRef id = container->getStructName();
-		if (id.startswith("struct.anon") ||
-			id.startswith("union.anon")) {
+		std::string id = container->getStructName().str();
+		if (id.find("struct.anon") == 0 ||
+			id.find("union.anon") == 0) {
 			// anon struct, get its parent instead
 			id = getScopeName(container, M);
 			ret |= getContainer(id, M, out);
 		} else {
-			out.insert(id.str());
+			out.insert(id);
 		}
 		ret = true;
 	}

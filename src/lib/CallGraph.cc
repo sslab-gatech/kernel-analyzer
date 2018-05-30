@@ -342,6 +342,30 @@ bool CallGraphPass::runOnFunction(Function *F) {
             FuncSet &FS = Ctx->Callees[CI];
             if (!findCallees(CI, FS))
                 continue;
+
+#ifndef TYPE_BASED
+            // looking for function pointer arguments
+            for (unsigned no = 0, ne = CI->getNumArgOperands(); no != ne; ++no) {
+                Value *V = CI->getArgOperand(no);
+                if (!isFunctionPointerOrVoid(V->getType()))
+                    continue;
+
+                // find all possible assignments to the argument
+                FuncSet VS;
+                if (!findFunctions(V, VS))
+                    continue;
+
+                // update argument FP-set for possible callees
+                for (Function *CF : FS) {
+                    if (!CF) {
+                        WARNING("NULL Function " << *CI << "\n");
+                        assert(0);
+                    }
+                    std::string Id = getArgId(CF, no);
+                    Changed |= mergeFuncSet(Ctx->FuncPtrs[Id], VS);
+                }
+            }
+#endif
         }
 #ifndef TYPE_BASED
         if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
@@ -366,29 +390,6 @@ bool CallGraphPass::runOnFunction(Function *F) {
                 findFunctions(V, FS);
                 Changed |= mergeFuncSet(Id, FS, isFunctionPointer(V->getType()));
             }
-        } else if (CallInst *CI = dyn_cast<CallInst>(I)) {
-            // looking for function pointer arguments
-            FuncSet &FS = Ctx->Callees[CI];
-            for (unsigned no = 0, ne = CI->getNumArgOperands(); no != ne; ++no) {
-                Value *V = CI->getArgOperand(no);
-                if (!isFunctionPointerOrVoid(V->getType()))
-                    continue;
-
-                // find all possible assignments to the argument
-                FuncSet VS;
-                if (!findFunctions(V, VS))
-                    continue;
-
-                // update argument FP-set for possible callees
-                for (Function *CF : FS) {
-                    if (!CF) {
-                        WARNING("NULL Function " << *CI << "\n");
-                        assert(0);
-                    }
-                    std::string Id = getArgId(CF, no);
-                    Changed |= mergeFuncSet(Ctx->FuncPtrs[Id], VS);
-                }
-            }
         }
 #endif
     }
@@ -397,7 +398,7 @@ bool CallGraphPass::runOnFunction(Function *F) {
 }
 
 // collect function pointer assignments in global initializers
-void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, StringRef Id) {
+void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, std::string &Id) {
     // structs
     if (ConstantStruct *CS = dyn_cast<ConstantStruct>(C)) {
         StructType *STy = CS->getType();
@@ -411,7 +412,7 @@ void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, 
                 if (Id.empty())
                     new_id = STy->getStructName().str() + "," + Twine(i).str();
                 else
-                    new_id = Id.str() + "," + Twine(i).str();
+                    new_id = Id + "," + Twine(i).str();
                 processInitializers(M, CS->getOperand(i), NULL, new_id);
             } else if (ETy->isArrayTy()) {
                 // nested array of struct
@@ -431,7 +432,7 @@ void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, 
                     }
                     if (new_id.empty()) {
                         assert(!Id.empty());
-                        new_id = Id.str() + "," + Twine(i).str();
+                        new_id = Id + "," + Twine(i).str();
                     }
                     Ctx->FuncPtrs[new_id].insert(F);
                 }
