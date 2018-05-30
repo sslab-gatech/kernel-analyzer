@@ -398,7 +398,7 @@ bool CallGraphPass::runOnFunction(Function *F) {
 }
 
 // collect function pointer assignments in global initializers
-void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, std::string &Id) {
+void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, std::string Id) {
     // structs
     if (ConstantStruct *CS = dyn_cast<ConstantStruct>(C)) {
         StructType *STy = CS->getType();

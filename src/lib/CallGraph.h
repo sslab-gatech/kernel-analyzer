@@ -7,7 +7,7 @@ class CallGraphPass : public IterativeModulePass {
 private:
     llvm::Function *getFuncDef(llvm::Function *F);
     bool runOnFunction(llvm::Function*);
-    void processInitializers(llvm::Module*, llvm::Constant*, llvm::GlobalValue*, std::string&);
+    void processInitializers(llvm::Module*, llvm::Constant*, llvm::GlobalValue*, std::string);
     bool findCallees(llvm::CallInst*, FuncSet&);
     bool isCompatibleType(llvm::Type *T1, llvm::Type *T2);
     bool findCalleesByType(llvm::CallInst*, FuncSet&);
