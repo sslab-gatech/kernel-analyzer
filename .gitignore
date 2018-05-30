@@ -3,3 +3,6 @@ TAGS
 cscope.*
 tags
 .vscode
+GPATH
+GRTAGS
+GTAGS
