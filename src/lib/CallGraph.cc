@@ -410,9 +410,9 @@ void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, 
             if (ETy->isStructTy()) {
                 std::string new_id;
                 if (Id.empty())
-                    new_id = STy->getStructName().str() + "," + Twine(i).str();
+                    new_id = STy->getStructName().str() + "," + std::to_string(i);
                 else
-                    new_id = Id + "," + Twine(i).str();
+                    new_id = Id + "," + std::to_string(i);
                 processInitializers(M, CS->getOperand(i), NULL, new_id);
             } else if (ETy->isArrayTy()) {
                 // nested array of struct
@@ -432,9 +432,9 @@ void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, 
                     }
                     if (new_id.empty()) {
                         assert(!Id.empty());
-                        new_id = Id + "," + Twine(i).str();
+                        new_id = Id + "," + std::to_string(i);
                     }
-                    Ctx->FuncPtrs[new_id].insert(F);
+                    Ctx->FuncPtrs[new_id].insert(getFuncDef(F));
                 }
             }
         }
@@ -446,7 +446,7 @@ void CallGraphPass::processInitializers(Module *M, Constant *C, GlobalValue *V, 
         // global function pointer variables
         if (V) {
             std::string Id = getVarId(V);
-            Ctx->FuncPtrs[Id].insert(F);
+            Ctx->FuncPtrs[Id].insert(getFuncDef(F));
         }
     }
 }
@@ -564,13 +564,13 @@ void CallGraphPass::dumpCallers() {
     for (auto M : Ctx->Callers) {
         Function *F = M.first;
         CallInstSet &CIS = M.second;
-        RES_REPORT("F : " << F->getName() << "\n");
+        RES_REPORT("F : " << getScopeName(F) << "\n");
 
         for (CallInst *CI : CIS) {
             Function *CallerF = CI->getParent()->getParent();
             RES_REPORT("\t");
             if (CallerF && CallerF->hasName()) {
-                RES_REPORT("(" << CallerF->getName() << ") ");
+                RES_REPORT("(" << getScopeName(CallerF) << ") ");
             } else {
                 RES_REPORT("(anonymous) ");
             }

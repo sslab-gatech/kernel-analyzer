@@ -103,7 +103,7 @@ static inline std::string
 getStructId(llvm::StructType *STy, llvm::Module *M, unsigned offset) {
 	if (!STy || STy->isLiteral())
 		return "";
-	return getScopeName(STy, M) + "," + llvm::Twine(offset).str();
+	return getScopeName(STy, M) + "," + std::to_string(offset);
 }
 
 static inline std::string getStructId(llvm::Type *Ty, llvm::Module *M) {
@@ -124,7 +124,7 @@ static inline std::string getVarId(llvm::AllocaInst *AI) {
 }
 
 static inline std::string getArgId(llvm::Function *F, unsigned no) {
-	return "arg." + getScopeName(F) + "." + llvm::Twine(no).str();
+	return "arg." + getScopeName(F) + "." + std::to_string(no);
 }
 
 static inline std::string getArgId(llvm::Argument *A) {
