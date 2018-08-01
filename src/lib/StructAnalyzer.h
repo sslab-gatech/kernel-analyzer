@@ -21,6 +21,9 @@ private:
 	std::vector<bool> pointerFlags;
 	std::vector<unsigned> fieldSize;
 	std::vector<unsigned> offsetMap;
+	std::vector<unsigned> fieldOffset;
+	// field => type(s) map
+	std::map<unsigned, std::set<const llvm::Type*> > elementType;
 	
 	// the corresponding data layout for this struct
 	const llvm::DataLayout* dataLayout;
@@ -31,8 +34,11 @@ private:
 	void setRealType(const llvm::StructType* st) { stType = st; }
 
 	// container type(s)
-	std::set<const llvm::StructType*> containers;
-	void addContainer(const llvm::StructType* st) { containers.insert(st); }
+	std::set<std::pair<const llvm::StructType*, unsigned> > containers;
+	void addContainer(const llvm::StructType* st, unsigned offset)
+	{
+		containers.insert(std::make_pair(st, offset));
+	}
 
 	static const llvm::StructType* maxStruct;
 	static unsigned maxStructSize;
@@ -47,6 +53,7 @@ private:
 		arrayFlags.push_back(isArray);
 		pointerFlags.push_back(isPointer);
 	}
+	void addFieldOffset(unsigned newOffset) { fieldOffset.push_back(newOffset); }
 	void appendFields(const StructInfo& other)
 	{
 		if (!other.isEmpty()) {
@@ -55,6 +62,21 @@ private:
 		arrayFlags.insert(arrayFlags.end(), (other.arrayFlags).begin(), (other.arrayFlags).end());
 		pointerFlags.insert(pointerFlags.end(), (other.pointerFlags).begin(), (other.pointerFlags).end());
 
+	}
+	void appendFieldOffset(const StructInfo& other)
+	{
+		unsigned base = fieldOffset.back();
+		for (auto i : other.fieldOffset) {
+			if (i == 0) continue;
+			fieldOffset.push_back(i + base);
+		}
+	}
+	void addElementType(unsigned field, const llvm::Type* type) { elementType[field].insert(type); }
+	void appendElementType(const StructInfo& other)
+	{
+		unsigned base = fieldSize.size();
+		for (auto item : other.elementType)
+			elementType[item.first + base].insert(item.second.begin(), item.second.end());
 	}
 
 	// Must be called after all fields have been analyzed
@@ -75,8 +97,7 @@ private:
 
 	static void updateMaxStruct(const llvm::StructType* st, unsigned structSize)
 	{
-		if (structSize > maxStructSize)
-		{
+		if (structSize > maxStructSize) {
 			maxStruct = st;
 			maxStructSize = structSize;
 		}
@@ -101,6 +122,23 @@ public:
 	const llvm::DataLayout* getDataLayout() const { return dataLayout; }
 	const llvm::StructType* getRealType() const { return stType; }
 	const uint64_t getAllocSize() const { return allocSize; }
+	unsigned getFieldOffset(unsigned field) const { return fieldOffset.at(field); }
+	std::set<const llvm::Type*> getElementType(unsigned field) const
+	{
+		auto itr = elementType.find(field);
+		if (itr != elementType.end())
+			return itr->second;
+		else
+			return std::set<const llvm::Type*>();
+	}
+	const llvm::StructType* getContainer(const llvm::StructType* st, unsigned offset) const
+	{
+		assert(!st->isOpaque());
+		if (containers.count(std::make_pair(st, offset)) == 1)
+			return st;
+		else
+			return nullptr;
+	}
 
 	static unsigned getMaxStructSize() { return maxStructSize; }
 
@@ -124,6 +162,8 @@ private:
 	StructInfo& addStructInfo(const llvm::StructType* st, const llvm::Module* M, const llvm::DataLayout* layout);
 	// If st has been calculated before, return its StructInfo; otherwise, calculate StructInfo for st
 	StructInfo& computeStructInfo(const llvm::StructType* st, const llvm::Module *M, const llvm::DataLayout* layout);
+	// update container information
+	void addContainer(const llvm::StructType* container, StructInfo& containee, unsigned offset, const llvm::Module* M);
 public:
 	StructAnalyzer() {}
 
