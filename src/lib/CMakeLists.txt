@@ -1,21 +1,13 @@
 set (KASource
-  Flags.h
-  Common.h
-  Global.h
   KAMain.cc
-  Annotation.h
   Annotation.cc
-  StructAnalyzer.h
   StructAnalyzer.cc
-  CallGraph.h
   CallGraph.cc
-  SafeStack.h
   SafeStack.cc
-  CRange.h
-  Range.h
   Range.cc
-  LinuxSS.h
   LinuxSS.cc
+  NodeFactory.cc
+  PointTo.cc
 )
 
 # Build libraries.

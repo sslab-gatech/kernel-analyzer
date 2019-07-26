@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2012 Xi Wang, Haogang Chen, Nickolai Zeldovich
  * Copyright (C) 2015 Byoungyoung Lee
- * Copyright (C) 2015 - 2017 Chengyu Song 
+ * Copyright (C) 2015 - 2019 Chengyu Song 
  * Copyright (C) 2016 Kangjie Lu
  *
  * For licensing details see LICENSE
@@ -32,6 +32,7 @@
 #include "Global.h"
 #include "CallGraph.h"
 #include "Pass.h"
+#include "PointTo.h"
 
 using namespace llvm;
 
@@ -122,17 +123,16 @@ void doBasicInitialization(Module *M) {
   for (Function &F : *M) {
     if (F.hasExternalLinkage() && !F.empty()) {
       // external linkage always ends up with the function name
-      StringRef FName = F.getName();
-      if (FName.startswith("SyS_"))
-        FName = StringRef("sys_" + FName.str().substr(4));
+      std::string FName = F.getName().str();
+      if (FName.find("SyS_") == 0)
+        FName = "sys_" + FName.substr(4);
       assert(GlobalCtx.Funcs.count(FName) == 0);
       GlobalCtx.Funcs[FName] = &F;
     }
   }
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
 
 #ifdef SET_STACK_SIZE
   struct rlimit rl;
@@ -178,6 +178,13 @@ int main(int argc, char **argv)
 
     doBasicInitialization(Module);
   }
+
+  // initialize nodefactory
+  GlobalCtx.nodeFactory.setStructAnalyzer(&GlobalCtx.structAnalyzer);
+  GlobalCtx.nodeFactory.setGobjMap(&GlobalCtx.Gobjs);
+  GlobalCtx.nodeFactory.setFuncMap(&GlobalCtx.Funcs);
+
+  populateNodeFactory(GlobalCtx);
 
   // Main workflow
   CallGraphPass CGPass(&GlobalCtx);
