@@ -2,7 +2,7 @@
  * Data structure
  *
  * Copyright (C) 2015 Jia Chen
- * Copyright (C) 2015 - 2018 Chengyu Song
+ * Copyright (C) 2015 - 2019 Chengyu Song
  *
  * For licensing details see LICENSE
  */
@@ -24,8 +24,7 @@ void StructAnalyzer::addContainer(const StructType* container, StructInfo& conta
 	containee.addContainer(container, offset);
 	// recursively add to all nested structs
 	const StructType* ct = containee.stType;
-	for (StructType::element_iterator itr = ct->element_begin(), ite = ct->element_end(); itr != ite; ++itr) {
-		Type* subType = *itr;
+	for (auto subType : ct->elements()) {
 		// strip away array
 		while (const ArrayType* arrayType = dyn_cast<ArrayType>(subType))
 			subType = arrayType->getElementType();
@@ -73,44 +72,85 @@ StructInfo& StructAnalyzer::addStructInfo(const StructType* st, const Module* M,
 
 	const StructLayout* stLayout = layout->getStructLayout(const_cast<StructType*>(st));
 	stInfo.addElementType(0, const_cast<StructType*>(st));
-	for (StructType::element_iterator itr = st->element_begin(), ite = st->element_end(); itr != ite; ++itr) {
-		const Type* subType = *itr;
-		currentOffset = stLayout->getElementOffset(fieldIndex++);
+
+	if (!st->isLiteral() && st->getName().startswith("union")) {
+		// handle union
 		stInfo.addFieldOffset(currentOffset);
-
-		bool isArray = isa<ArrayType>(subType);
-		// Treat an array field as a single element of its type
-		while (const ArrayType* arrayType = dyn_cast<ArrayType>(subType))
-			subType = arrayType->getElementType();
-
-		// record type after stripping array
-		stInfo.addElementType(numField, subType);
-
-		// The offset is where this element will be placed in the expanded struct
+		stInfo.addField(1, false, false, true);
 		stInfo.addOffsetMap(numField);
+		//deal with the struct inside this union independently:
+		for (auto subType : st->elements()) {
+			//deal with fixed size array of struct
+			uint64_t arraySize = 1;
+			while (const ArrayType* arrayType = dyn_cast<ArrayType>(subType)) {
+				arraySize *= arrayType->getNumElements();
+				subType = arrayType->getElementType();
+			}
+			if (arraySize == 0) arraySize = 1;
 
-		// Nested struct
-		if (const StructType* structType = dyn_cast<StructType>(subType)) {
-			assert(!structType->isOpaque() && "Nested opaque struct");
-			StructInfo& subInfo = computeStructInfo(structType, M, layout);
-			assert(subInfo.isFinalized());
+			if (const StructType* structType = dyn_cast<StructType>(subType)) {
+				StructInfo& subInfo = computeStructInfo(structType, M, layout);
+				assert(subInfo.isFinalized());
+				// to allow weird container_of()
+				for (uint64_t i = 0; i < arraySize; ++i)
+					addContainer(st, subInfo, currentOffset + i * layout->getTypeAllocSize(subType), M);
+			}
+		}
+	} else {
+		for (auto subType : st->elements()) {
+			currentOffset = stLayout->getElementOffset(fieldIndex++);
+			stInfo.addFieldOffset(currentOffset);
 
-			addContainer(st, subInfo, currentOffset, M);
+			bool isArray = false;
+			// deal with array
+			uint64_t arraySize = 1;
+			if (const ArrayType* arrayType = dyn_cast<ArrayType>(subType)) {
+				stInfo.addRealSize(layout->getTypeAllocSize(arrayType->getElementType()) * arrayType->getNumElements());
+				isArray = true;
+			}
 
-			// Copy information from this substruct
-			stInfo.appendFields(subInfo);
-			stInfo.appendFieldOffset(subInfo);
-			stInfo.appendElementType(subInfo);
+			// Treat an array field as a single element of its type
+			while (const ArrayType* arrayType = dyn_cast<ArrayType>(subType)) {
+				arraySize *= arrayType->getNumElements();
+				subType = arrayType->getElementType();
+			}
+			if (arraySize == 0) arraySize = 1;
 
-			numField += subInfo.getExpandedSize();
-		} else {
-			stInfo.addField(1, isArray, subType->isPointerTy());
-			++numField;
+			// record type after stripping array
+			stInfo.addElementType(numField, subType);
+
+			// The offset is where this element will be placed in the expanded struct
+			stInfo.addOffsetMap(numField);
+
+			// Nested struct
+			if (const StructType* structType = dyn_cast<StructType>(subType)) {
+				assert(!structType->isOpaque() && "Nested opaque struct");
+				StructInfo& subInfo = computeStructInfo(structType, M, layout);
+				assert(subInfo.isFinalized());
+
+				// for rare container_of
+				for (uint64_t i = 0; i < arraySize; ++i)
+					addContainer(st, subInfo, currentOffset + i * layout->getTypeAllocSize(subType), M);
+
+				// Copy information from this substruct
+				stInfo.appendFields(subInfo);
+				stInfo.appendFieldOffset(subInfo);
+				stInfo.appendElementType(subInfo);
+
+				numField += subInfo.getExpandedSize();
+			} else {
+				stInfo.addField(1, isArray, subType->isPointerTy(), false);
+				++numField;
+				if (!isArray) {
+					stInfo.addRealSize(layout->getTypeAllocSize(subType));
+				}
+			}
 		}
 	}
 
 	stInfo.setRealType(st);
 	stInfo.setDataLayout(layout);
+	stInfo.setModule(M);
 	stInfo.finalize();
 	StructInfo::updateMaxStruct(st, numField);
 
@@ -150,8 +190,13 @@ const StructInfo* StructAnalyzer::getStructInfo(const StructType* st, Module* M)
 	if (!st->isLiteral()) {
 		auto real = structMap.find(getScopeName(st, M));
 		//assert(real != structMap.end() && "Cannot resolve opaque struct");
-		if (real != structMap.end())
+		if (real != structMap.end()) {
 			st = real->second;
+		} else {
+			errs() << "cannot find struct, scopeName:" << getScopeName(st, M) << "\n";
+			st->print(errs());
+			errs() << "\n";
+		}
 	}
 
 	itr = structInfoMap.find(st);
@@ -177,8 +222,7 @@ bool StructAnalyzer::getContainer(std::string stid, const Module* M, std::set<st
 		if (container->isLiteral())
 			continue;
 		std::string id = container->getStructName().str();
-		if (id.find("struct.anon") == 0 ||
-			id.find("union.anon") == 0) {
+		if (id.find("struct.anon") == 0 || id.find("union.anon") == 0) {
 			// anon struct, get its parent instead
 			id = getScopeName(container, M);
 			ret |= getContainer(id, M, out);
@@ -191,10 +235,6 @@ bool StructAnalyzer::getContainer(std::string stid, const Module* M, std::set<st
 	return ret;
 }
 
-//bool StructAnalyzer::getContainer(const StructType* st, std::set<std::string> &out) const
-//{
-//}
-
 void StructAnalyzer::printStructInfo() const
 {
 	errs() << "----------Print StructInfo------------\n";
@@ -206,6 +246,15 @@ void StructAnalyzer::printStructInfo() const
 		errs() << ">, offset < ";
 		for (auto off: info.offsetMap)
 			errs() << off << " ";
+		errs() << ">, fieldOffset <";
+		for (auto off: info.fieldOffset)
+			errs() << off << " ";
+		errs() << ">, arrayFlag <";
+		for (auto af: info.arrayFlags)
+			errs() << af << " ";
+		errs() <<">, unionFlag <";
+		for (auto uf: info.unionFlags)
+			errs() << uf << " ";
 		errs() << ">\n";
 	}
 	errs() << "----------End of print------------\n";

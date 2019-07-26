@@ -19,9 +19,12 @@ private:
 	// FIXME: vector<bool> is considered to be BAD C++ practice. We have to switch to something else like deque<bool> some time in the future
 	std::vector<bool> arrayFlags;
 	std::vector<bool> pointerFlags;
+	std::vector<bool> unionFlags;
 	std::vector<unsigned> fieldSize;
 	std::vector<unsigned> offsetMap;
 	std::vector<unsigned> fieldOffset;
+	std::vector<unsigned> fieldRealSize;
+
 	// field => type(s) map
 	std::map<unsigned, std::set<const llvm::Type*> > elementType;
 	
@@ -32,6 +35,10 @@ private:
 	// real type
 	const llvm::StructType* stType;
 	void setRealType(const llvm::StructType* st) { stType = st; }
+
+	// defining module
+	const llvm::Module* module;
+	void setModule(const llvm::Module* M) { module = M; }
 
 	// container type(s)
 	std::set<std::pair<const llvm::StructType*, unsigned> > containers;
@@ -47,13 +54,15 @@ private:
 	bool finalized;
 
 	void addOffsetMap(unsigned newOffsetMap) { offsetMap.push_back(newOffsetMap); }
-	void addField(unsigned newFieldSize, bool isArray, bool isPointer)
+	void addField(unsigned newFieldSize, bool isArray, bool isPointer, bool isUnion)
 	{
 		fieldSize.push_back(newFieldSize);
 		arrayFlags.push_back(isArray);
 		pointerFlags.push_back(isPointer);
+		unionFlags.push_back(isUnion);
 	}
 	void addFieldOffset(unsigned newOffset) { fieldOffset.push_back(newOffset); }
+	void addRealSize(unsigned size) { fieldRealSize.push_back(size); }
 	void appendFields(const StructInfo& other)
 	{
 		if (!other.isEmpty()) {
@@ -61,7 +70,8 @@ private:
 		}
 		arrayFlags.insert(arrayFlags.end(), (other.arrayFlags).begin(), (other.arrayFlags).end());
 		pointerFlags.insert(pointerFlags.end(), (other.pointerFlags).begin(), (other.pointerFlags).end());
-
+		unionFlags.insert(unionFlags.end(), (other.unionFlags).begin(), (other.unionFlags).end());
+		fieldRealSize.insert(fieldRealSize.end(), (other.fieldRealSize).begin(), (other.fieldRealSize).end());
 	}
 	void appendFieldOffset(const StructInfo& other)
 	{
@@ -84,6 +94,7 @@ private:
 	{
 		assert(fieldSize.size() == arrayFlags.size());
 		assert(pointerFlags.size() == arrayFlags.size());
+		assert(unionFlags.size() == arrayFlags.size());
 		unsigned numField = fieldSize.size();
 		if (numField == 0)
 			fieldSize.resize(1);
@@ -118,10 +129,13 @@ public:
 	bool isEmpty() const { return (fieldSize[0] == 0);}
 	bool isFieldArray(unsigned field) const { return arrayFlags.at(field); }
 	bool isFieldPointer(unsigned field) const { return pointerFlags.at(field); }
+	bool isFieldUnion(unsigned field) const { return unionFlags.at(field); }
 	unsigned getOffset(unsigned off) const { return offsetMap.at(off); }
+	const llvm::Module* getModule() const { return module; }
 	const llvm::DataLayout* getDataLayout() const { return dataLayout; }
 	const llvm::StructType* getRealType() const { return stType; }
 	const uint64_t getAllocSize() const { return allocSize; }
+	unsigned getFieldRealSize(unsigned field) const { return fieldRealSize.at(field); }
 	unsigned getFieldOffset(unsigned field) const { return fieldOffset.at(field); }
 	std::set<const llvm::Type*> getElementType(unsigned field) const
 	{
