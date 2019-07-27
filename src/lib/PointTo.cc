@@ -199,7 +199,7 @@ static void createNodeForHeapObject(const Instruction *I, int SizeArg, int FlagA
   if (obj == AndersNodeFactory::InvalidIndex) {
     obj = nodeFactory.createObjectNode(I, isUnion, true);
     for (unsigned i = 1; i < maxSize; ++i) {
-      isUnion = stInfo ? stInfo->isFieldUnion(i) : false;
+      isUnion = (stInfo && i < stInfo->getExpandedSize()) ? stInfo->isFieldUnion(i) : false;
       nodeFactory.createObjectNode(obj, i, isUnion, true);
     }
   }
