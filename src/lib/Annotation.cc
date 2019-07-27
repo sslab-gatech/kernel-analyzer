@@ -49,6 +49,22 @@ static inline bool needAnnotation(Value *V) {
 //
 bool isAllocFn(StringRef name, int *size, int *flag) {
 	
+	// user space
+	// malloc/new
+	if (!name.compare("malloc") ||
+	    !name.compare("_Znwj") ||
+		!name.compare("_ZnwjRKSt9nothrow_t") ||
+		!name.compare("_Znwm") ||
+		!name.compare("_ZnwmRKSt9nothrow_t") ||
+		!name.compare("_Znaj") ||
+		!name.compare("_ZnajRKSt9nothrow_t") ||
+		!name.compare("_Znam") ||
+		!name.compare("_ZnamRKSt9nothrow_t")) {
+		*size = 0;
+		*flag = -1;
+		return true;
+	}
+
 	// kmalloc
 	// don't handle variable length yet
 	if (!name.compare("kmalloc_array") ||

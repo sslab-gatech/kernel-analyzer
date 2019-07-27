@@ -59,7 +59,7 @@ static NodeIndex processStruct(const Value* v, const StructType* stType, const N
     return nodeFactory.getNullObjectNode();
 
   // Non-empty structs: create one pointer and one target for each field
-  uint64_t stSize = stInfo->getExpandedSize();
+  unsigned stSize = stInfo->getExpandedSize();
 
   // We construct a target variable for each field
   // A better approach is to collect all constant GEP instructions and
@@ -139,9 +139,70 @@ static void createNodeForGlobals(Module *M, AndersNodeFactory &nodeFactory, Stru
 }
 
 static void createNodeForHeapObject(const Instruction *I, int SizeArg, int FlagArg,
-                                    AndersNodeFactory &nodeFactory, StructAnalyzer structAnalyzer) {
+                                    AndersNodeFactory &nodeFactory, StructAnalyzer &structAnalyzer) {
 
-  // TODO:
+  const PointerType* pType = dyn_cast<PointerType>(I->getType());
+  assert(pType != NULL && "unhandled malloc function");
+  const Type* elemType = pType->getElementType();
+
+  // TODO: using casting is not the best way, consider sizeof
+  if (elemType->isIntegerTy(8)) {
+    // Check all the users of inst
+    // TODO: use a working list to handle load/store
+    for (auto U: I->users()) {
+      if (const CastInst *CI = dyn_cast<CastInst>(U)) {
+        pType = dyn_cast<PointerType>(CI->getType());
+        if (!pType) continue;
+        elemType = pType->getElementType();
+        break;
+      }
+    }
+  }
+
+  unsigned maxSize = 0;
+  uint64_t allocSize = 1;
+  const StructInfo* stInfo = nullptr;
+  bool isUnion = false;
+  while (const ArrayType* arrayType = dyn_cast<ArrayType>(elemType)) {
+    allocSize *= arrayType->getNumElements();
+    elemType = arrayType->getElementType();
+  }
+  if (allocSize == 0) allocSize = 1;
+
+  if (const StructType* structType = dyn_cast<StructType>(elemType)) {
+    stInfo = structAnalyzer.getStructInfo(structType, nodeFactory.getModule());
+    assert(stInfo != nullptr && "structInfoMap should have info for all structs!");
+    if (!structType->isLiteral() && structType->getStructName().startswith("union"))
+      isUnion = true;
+    maxSize = stInfo->getExpandedSize();
+    allocSize *= stInfo->getAllocSize();
+  }
+
+  // if size arg exists
+  if (SizeArg >= 0) {
+    const Value *SV = I->getOperand(SizeArg);
+    if (const ConstantInt *size = dyn_cast<ConstantInt>(SV)) {
+      uint64_t zext_size = size->getZExtValue();
+      if (zext_size > allocSize) {
+        assert(zext_size < (uint64_t)UINT_MAX);
+        maxSize = zext_size;
+      }
+    }
+  } else {
+    // FIXME: kmem_cache_alloc
+  }
+
+  if (maxSize == 0) maxSize = StructInfo::getMaxStructSize();
+
+  // Create the first heap node
+  NodeIndex obj = nodeFactory.getObjectNodeFor(I);
+  if (obj == AndersNodeFactory::InvalidIndex) {
+    obj = nodeFactory.createObjectNode(I, isUnion, true);
+    for (unsigned i = 1; i < maxSize; ++i) {
+      isUnion = stInfo ? stInfo->isFieldUnion(i) : false;
+      nodeFactory.createObjectNode(obj, i, isUnion, true);
+    }
+  }
 }
 
 void populateNodeFactory(GlobalContext &GlobalCtx) {
