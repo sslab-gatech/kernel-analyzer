@@ -47,9 +47,9 @@ private:
 
 	void visitBranchInst(llvm::BranchInst *, 
 						 llvm::BasicBlock *, ValueRangeMap &);
-	void visitTerminator(llvm::TerminatorInst *,
-						 llvm::BasicBlock *, ValueRangeMap &);
 	void visitSwitchInst(llvm::SwitchInst *, 
+						 llvm::BasicBlock *, ValueRangeMap &);
+	void visitTerminator(llvm::Instruction *,
 						 llvm::BasicBlock *, ValueRangeMap &);
 
 public:

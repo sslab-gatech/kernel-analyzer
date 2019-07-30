@@ -155,6 +155,7 @@ bool SafeStackPass::isSafeCall(CallInst *CI, unsigned ArgNo, uint64_t Size) {
 		// FIXME: if recursive, assume ??safe??
 		fi = FuncInfo.insert(std::make_pair(key, true)).first;
 
+#if LLVM_VERSION_MAJOR <= 4
 		if (F->doesNotCapture(ArgNo)) {
 			// LLVM 'nocapture' attribute is only set for arguments whose address
 			// is not stored, passed around, or used in any other non-trivial way.
@@ -163,6 +164,7 @@ bool SafeStackPass::isSafeCall(CallInst *CI, unsigned ArgNo, uint64_t Size) {
 			fi->second = true;
 			continue;
 		}
+#endif
 
 		if (F->isIntrinsic()) {
 			// intrinsic, assumes safe

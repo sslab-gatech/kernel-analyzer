@@ -100,7 +100,7 @@ bool LinuxSS::dumpControlDep(BasicBlock *CBB, BBSet &Checked) {
             continue;
         }
 
-        TerminatorInst *TI = BB->getTerminator();
+        Instruction *TI = BB->getTerminator();
         if (BranchInst *BI = dyn_cast<BranchInst>(TI)) {
             if (BI->isConditional()) {
                 Value *Cond = BI->getCondition();
@@ -132,7 +132,7 @@ bool LinuxSS::isTrueFalseFunc(Function *F) {
     ValueSet Visited;
     RetSet RS;
     for (BasicBlock &BB : *F) {
-        TerminatorInst *T = BB.getTerminator();
+        Instruction *T = BB.getTerminator();
         if (ReturnInst *R = dyn_cast<ReturnInst>(T)) {
             Value *RV = R->getReturnValue();
             if (RV != nullptr)
@@ -476,7 +476,7 @@ bool LinuxSS::runOnFunction(Function *F) {
     ValueSet Visited;
     RetSet RS;
     for (BasicBlock &BB : *F) {
-        TerminatorInst *T = BB.getTerminator();
+        Instruction *T = BB.getTerminator();
         if (ReturnInst *R = dyn_cast<ReturnInst>(T)) {
             Value *RV = R->getReturnValue();
             if (RV != nullptr)

@@ -16,10 +16,16 @@ public:
     typedef llvm::SmallPtrSet<llvm::Value*, 8> ValueSet;
     typedef llvm::SmallPtrSet<llvm::BasicBlock*, 8> BBSet;
 
+#if LLVM_VERSION_MAJOR <= 4
     typedef llvm::DominatorTreeBase<BasicBlock> DomTree;
+    typedef llvm::DominatorTreeBase<BasicBlock> PostDomTree;
+#else
+    typedef llvm::DominatorTreeBase<BasicBlock, false> DomTree;
+    typedef llvm::DominatorTreeBase<BasicBlock, true> PostDomTree;
+#endif
 
 private:
-    DomTree *gPDT;
+    PostDomTree *gPDT;
     DomTree *gDT;
 
     bool runOnFunction(llvm::Function*);
@@ -33,8 +39,13 @@ private:
 public:
     LinuxSS(GlobalContext *Ctx_)
         : IterativeModulePass(Ctx_, "LinuxSS") {
-        gPDT = new DomTree(true);
+#if LLVM_VERSION_MAJOR <= 4
+        gPDT = new PostDomTree(true);
         gDT = new DomTree(false);
+#else
+        gPDT = new PostDomTree();
+        gDT = new DomTree();
+#endif
         Ctx->add("SecConds", new std::set<llvm::Value*>());
     }
 

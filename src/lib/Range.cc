@@ -209,7 +209,7 @@ CRange RangePass::visitBinaryOp(BinaryOperator *BO)
 	CRange R = getRange(BO->getParent(), BO->getOperand(1));
 	R.match(L);
 	switch (BO->getOpcode()) {
-		default: BO->dump(); llvm_unreachable("Unknown binary operator!");
+		default: /*BO->dump();*/ llvm_unreachable("Unknown binary operator!");
 		case Instruction::Add:  return L.add(R);
 		case Instruction::Sub:  return L.sub(R);
 		case Instruction::Mul:  return L.multiply(R);
@@ -423,22 +423,20 @@ void RangePass::visitSwitchInst(SwitchInst *SI, BasicBlock *BB,
 						   
 	if (SI->getDefaultDest() != BB) {
 		// union all values that goes to BB
-		for (SwitchInst::CaseIt i = SI->case_begin(), e = SI->case_end();
-			 i != e; ++i) {
+		for (auto &i : SI->cases()) {
 			if (i.getCaseSuccessor() == BB)
 				CR.safeUnion(i.getCaseValue()->getValue());
 		}
 	} else {
 		// default case
-		for (SwitchInst::CaseIt i = SI->case_begin(), e = SI->case_end();
-			 i != e; ++i)
+		for (auto &i : SI->cases())
 			CR.safeUnion(i.getCaseValue()->getValue());
 		CR = CR.inverse();
 	}
 	insertVRM(V, VCR.intersectWith(CR), VRM);
 }
 
-void RangePass::visitTerminator(TerminatorInst *I, BasicBlock *BB,
+void RangePass::visitTerminator(Instruction *I, BasicBlock *BB,
 								 ValueRangeMap &VRM) {
 	if (BranchInst *BI = dyn_cast<BranchInst>(I))
 		visitBranchInst(BI, BB, VRM);
@@ -448,7 +446,6 @@ void RangePass::visitTerminator(TerminatorInst *I, BasicBlock *BB,
 		// ignore: I->dump(); llvm_unreachable("Unknown terminator!");
 	}
 }
-
 
 bool RangePass::updateRangeFor(BasicBlock *BB)
 {
