@@ -20,14 +20,28 @@ NDSS 2016
 }
 ```
 
-### Papers/Tools use this tool
+### Papers/Tools use this tool/framework
 
 ```
 Principled Unearthing of TCP Side Channel Vulnerabilities
 Yue Cao, Zhongjie Wang, Zhiyun Qian, Chengyu Song, Srikanth Krishnamurthy, and Paul Yu
+CCS 2019
+```
+```
+Detecting Missing-Check Bugs via Semantic- and Context-Aware Criticalness and Constraints Inferences
+Kangjie Lu, Aditya Pakki, and Qiushi Wu
+USENIX Security 2019
+```
+```
+Automatically Identifying Security Checks for Detecting Kernel Semantic Bugs
+Kangjie Lu, Aditya Pakki, and Qiushi Wu
+ESORICS 2019
+```
+```
+Check it Again: Detecting Lacking-Recheck Bugs in OS Kernels
+Wenwen Wang, Kangjie Lu, and Pen-Chung Yew
 CCS 2018
 ```
-
 ```
 UniSan: Proactive Kernel Memory Initialization to Eliminate Data Leakages
 Kangjie Lu, Chengyu Song, Taesoo Kim, and Wenke Lee
